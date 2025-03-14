@@ -28,21 +28,6 @@ O TanStack Query (anteriormente conhecido como React Query) é uma biblioteca de
 
 ## Instalação
 
-### Para projetos Vite + React + TypeScript:
-
-```bash
-# NPM
-npm install @tanstack/react-query
-
-# Yarn
-yarn add @tanstack/react-query
-
-# PNPM
-pnpm add @tanstack/react-query
-```
-
-### Para projetos Next.js:
-
 ```bash
 # NPM
 npm install @tanstack/react-query @tanstack/react-query-devtools
@@ -71,10 +56,10 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Configurações globais para todas as queries
-      staleTime: 60 * 1000, // 1 minuto
-      cacheTime: 5 * 60 * 1000, // 5 minutos
-      refetchOnWindowFocus: false,
-      retry: 1,
+      staleTime: 60 * 1000, //  Tempo que os dados são considerados "frescos" antes de uma nova refetch ser necessária - 1 minuto
+      cacheTime: 5 * 60 * 1000, // Tempo que os dados permanecem no cache antes de serem descartados - 5 minutos
+      refetchOnWindowFocus: false, // Define se a query deve ser refeita automaticamente quando a janela volta ao foco
+      retry: 1, // Número de tentativas caso a requisição falhe antes de exibir erro
     },
   },
 });
@@ -82,46 +67,13 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
+      {" "}
+      // O QueryClientProvider é responsável por fornecer o QueryClient para toda a aplicação
       <App />
-      <ReactQueryDevtools initialIsOpen={false} />
+      <ReactQueryDevtools /> // Adiciona a ferramenta de desenvolvimento do React Query para depuração
     </QueryClientProvider>
   </React.StrictMode>
 );
-```
-
-### Configuração em aplicações Next.js:
-
-```tsx
-// src/pages/_app.tsx
-import type { AppProps } from "next/app";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { useState } from "react";
-
-export default function App({ Component, pageProps }: AppProps) {
-  // Criar uma nova instância do QueryClient para cada sessão
-  // Isso é importante para evitar compartilhamento de estado entre usuários
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 60 * 1000,
-            cacheTime: 5 * 60 * 1000,
-            refetchOnWindowFocus: false,
-            retry: 1,
-          },
-        },
-      })
-  );
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <Component {...pageProps} />
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
-  );
-}
 ```
 
 ## Estrutura de Organização
@@ -205,12 +157,12 @@ export interface UserFilters {
 }
 
 export const userService = {
-  getUsers: async (filters?: UserFilters): Promise<User[]> => {
+  async getUsers(filters?: UserFilters): Promise<User[]> {
     const { data } = await api.get(ENDPOINTS.USERS, { params: filters });
     return data;
   },
 
-  getUserById: async (id: number): Promise<User> => {
+  async getUserById(id: number): Promise<User> {
     const { data } = await api.get(`${ENDPOINTS.USERS}/${id}`);
     return data;
   },
@@ -231,23 +183,27 @@ export const QUERY_KEYS = {
 };
 
 // Hook para obter lista de usuários
-export const useUsers = (filters?: UserFilters, options?: UseQueryOptions<User[]>) => {
+export function useUsers(filters?: UserFilters, options?: UseQueryOptions<User[]>) {
   return useQuery<User[]>({
     queryKey: [QUERY_KEYS.USERS, filters], // A chave muda quando os filtros mudam
-    queryFn: () => userService.getUsers(filters),
+    queryFn: function () {
+      return userService.getUsers(filters);
+    },
     ...options,
   });
-};
+}
 
 // Hook para obter detalhes de um usuário
-export const useUserDetails = (id: number, options?: UseQueryOptions<User>) => {
+export function useUserDetails(id: number, options?: UseQueryOptions<User>) {
   return useQuery<User>({
     queryKey: [QUERY_KEYS.USER_DETAILS, id],
-    queryFn: () => userService.getUserById(id),
+    queryFn: function () {
+      return userService.getUserById(id);
+    },
     enabled: !!id, // Só executa se id for fornecido
     ...options,
   });
-};
+}
 ```
 
 ### Usando o hook em um componente:
@@ -257,31 +213,50 @@ export const useUserDetails = (id: number, options?: UseQueryOptions<User>) => {
 import React, { useState } from "react";
 import { useUsers } from "../hooks/query/useUsers";
 
-export const UserList = () => {
+export function UserList() {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, error } = useUsers({ page, limit: 10 });
 
-  if (isLoading) return <div>Carregando...</div>;
-  if (isError) return <div>Erro ao carregar: {error.message}</div>;
+  if (isLoading) {
+    return <div>Carregando...</div>;
+  }
+
+  if (isError) {
+    return <div>Erro ao carregar: {error.message}</div>;
+  }
+
+  function handlePreviousPage() {
+    setPage(function (p) {
+      return Math.max(1, p - 1);
+    });
+  }
+
+  function handleNextPage() {
+    setPage(function (p) {
+      return p + 1;
+    });
+  }
 
   return (
     <div>
       <h2>Lista de Usuários</h2>
       <ul>
-        {data?.map((user) => (
-          <li key={user.id}>
-            {user.name} - {user.email}
-          </li>
-        ))}
+        {data?.map(function (user) {
+          return (
+            <li key={user.id}>
+              {user.name} - {user.email}
+            </li>
+          );
+        })}
       </ul>
-      <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+      <button onClick={handlePreviousPage} disabled={page === 1}>
         Anterior
       </button>
       <span> Página {page} </span>
-      <button onClick={() => setPage((p) => p + 1)}>Próxima</button>
+      <button onClick={handleNextPage}>Próxima</button>
     </div>
   );
-};
+}
 ```
 
 ## Manipulação de Mutações
@@ -300,17 +275,17 @@ export interface CreateUserData {
 export const userService = {
   // ... outros métodos
 
-  createUser: async (userData: CreateUserData): Promise<User> => {
+  async createUser(userData: CreateUserData): Promise<User> {
     const { data } = await api.post(ENDPOINTS.USERS, userData);
     return data;
   },
 
-  updateUser: async (id: number, userData: Partial<User>): Promise<User> => {
+  async updateUser(id: number, userData: Partial<User>): Promise<User> {
     const { data } = await api.patch(`${ENDPOINTS.USERS}/${id}`, userData);
     return data;
   },
 
-  deleteUser: async (id: number): Promise<void> => {
+  async deleteUser(id: number): Promise<void> {
     await api.delete(`${ENDPOINTS.USERS}/${id}`);
   },
 };
@@ -324,20 +299,24 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { userService, CreateUserData, User } from "../../services/userService";
 import { QUERY_KEYS } from "../query/useUsers";
 
-export const useCreateUser = () => {
+export function useCreateUser() {
   const queryClient = useQueryClient();
 
   return useMutation<User, Error, CreateUserData>({
-    mutationFn: (userData) => userService.createUser(userData),
-    onSuccess: (newUser) => {
+    mutationFn: function (userData) {
+      return userService.createUser(userData);
+    },
+    onSuccess: function (newUser) {
       // Atualiza o cache após a criação bem-sucedida
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.USERS] });
 
       // Opcional: Atualize o cache diretamente sem fazer nova requisição
-      queryClient.setQueryData<User[]>([QUERY_KEYS.USERS], (oldData) => (oldData ? [...oldData, newUser] : [newUser]));
+      queryClient.setQueryData<User[]>([QUERY_KEYS.USERS], function (oldData) {
+        return oldData ? [...oldData, newUser] : [newUser];
+      });
     },
   });
-};
+}
 ```
 
 ### Hook de atualização:
@@ -353,12 +332,14 @@ interface UpdateUserVariables {
   data: Partial<User>;
 }
 
-export const useUpdateUser = () => {
+export function useUpdateUser() {
   const queryClient = useQueryClient();
 
   return useMutation<User, Error, UpdateUserVariables>({
-    mutationFn: ({ id, data }) => userService.updateUser(id, data),
-    onSuccess: (updatedUser) => {
+    mutationFn: function ({ id, data }) {
+      return userService.updateUser(id, data);
+    },
+    onSuccess: function (updatedUser) {
       // Invalidar a query para forçar uma nova requisição
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.USERS] });
 
@@ -368,7 +349,7 @@ export const useUpdateUser = () => {
       });
     },
   });
-};
+}
 ```
 
 ### Usando a mutação em um componente:
@@ -378,7 +359,7 @@ export const useUpdateUser = () => {
 import React, { useState } from "react";
 import { useCreateUser } from "../hooks/mutation/useCreateUser";
 
-export const UserForm = () => {
+export function UserForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -426,7 +407,7 @@ export const UserForm = () => {
       {createUser.isError && <div style={{ color: "red" }}>Erro: {createUser.error.message}</div>}
     </form>
   );
-};
+}
 ```
 
 ## Uso Avançado
@@ -455,7 +436,7 @@ export interface PostsResponse {
 }
 
 export const postService = {
-  getPosts: async (page = 1, limit = 10): Promise<PostsResponse> => {
+  async getPosts(page = 1, limit = 10): Promise<PostsResponse> {
     const { data } = await api.get(ENDPOINTS.POSTS, {
       params: { page, limit },
     });
